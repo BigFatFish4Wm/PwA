@@ -212,7 +212,12 @@ async function main() {
   }
 
   const releaseDir = join(ROOT, 'release')
+  const existingAssets = new Set((release.assets ?? []).map((asset) => asset.name))
   for (const name of readdirSync(releaseDir).filter((item) => item.endsWith('.zip'))) {
+    if (existingAssets.has(name)) {
+      console.log(`[publish] 资产已存在，跳过 ${name}`)
+      continue
+    }
     const data = readFileSync(join(releaseDir, name))
     const uploaded = await fetch(`https://uploads.github.com/repos/${owner}/${REPO}/releases/${release.id}/assets?name=${encodeURIComponent(name)}`, {
       method: 'POST',

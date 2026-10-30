@@ -2,6 +2,7 @@
 
 让 AI 助手（Coopanion 的「汐」）陪你打《杀戮尖塔 2》：**Mod** 把一个游戏窗口的状态和原子动作暴露成本机 MCP / HTTP，**World** 把它们翻译成助手能调用的工具。Mod 只提供动作、不做决策；单人、本机双窗口联机都支持。
 
+- 仓库 / 下载：**<https://github.com/BigFatFish4Wm/PwA>**（release 里有现成 zip）
 - 游戏版本：**v0.111.0**（Windows / Steam）
 - Mod 版本：**1.0.0**（`PwABridge`）
 - World 版本：**1.0.0**（`cortico-world-pwa`，Coopanion API 6）
