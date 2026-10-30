@@ -2,13 +2,13 @@
 /**
  * 把当前工作区发布到 GitHub（走 REST API，不依赖 git push——这台机器 443 到 github.com 的 git 通道被拦）。
  *
- * 用法：node tools/publish-github.mjs [--repo PwA] [--tag v1.0.0] [--dry]
+ * 用法：node tools/publish-github.mjs [--repo PwA] [--tag v1.1.0] [--message "..."] [--dry]
  *
  * 行为：
  *  1. 读 %USERPROFILE%\.pwa\github-token.txt；
  *  2. 仓库不存在就创建（公开）；
  *  3. 用 Git Data API 建 blobs/tree/commit，更新 main（有历史就挂父提交）；
- *  4. 创建 release，上传 release/*.zip 作为资产；
+ *  4. 创建 release（说明取 docs/发布说明-<tag 去掉 v>.md），上传 release/*.zip 作为资产；
  *  5. 打印仓库与 release 地址。
  *
  * 只发布 src/docs/tools/release 相关文件；backups、ref、tmp-* 不发布。
@@ -28,6 +28,17 @@ const TAG = arg('--tag', 'v1.0.0')
 const BRANCH = arg('--branch', 'main')
 const DRY = args.includes('--dry')
 const ROOT = resolve(process.cwd())
+/** 提交说明：`--message` 优先，否则按 tag 生成一句。 */
+const MESSAGE = arg('--message', `PwA ${TAG}: docs, worlds and release packages`)
+/** 发布说明：docs/发布说明-<tag>.md（tag 去掉开头的 v），回退到 1.0.0 那份。 */
+function notesFile() {
+  const version = TAG.replace(/^v/i, '')
+  for (const name of [`发布说明-${version}.md`, '发布说明-1.0.0.md']) {
+    const path = join(ROOT, 'docs', name)
+    if (existsSync(path)) return path
+  }
+  return null
+}
 
 const tokenFile = join(homedir(), '.pwa', 'github-token.txt')
 if (!existsSync(tokenFile)) {
@@ -161,7 +172,7 @@ async function main() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      message: `PwA ${TAG}: singleplayer + broker co-op, docs and release packages`,
+      message: MESSAGE,
       tree: tree.sha,
       parents: parentSha ? [parentSha] : [],
     }),
@@ -187,13 +198,23 @@ async function main() {
     body: JSON.stringify({ default_branch: BRANCH }),
   }).catch(() => {})
 
-  const notesPath = join(ROOT, 'docs', '发布说明-1.0.0.md')
-  const body = existsSync(notesPath) ? readFileSync(notesPath, 'utf8') : `PwA ${TAG}`
+  const notesPath = notesFile()
+  if (notesPath) console.log(`[publish] 发布说明：${notesPath.slice(ROOT.length + 1)}`)
+  const body = notesPath ? readFileSync(notesPath, 'utf8') : `PwA ${TAG}`
 
   let release
   try {
     release = await api(`/repos/${owner}/${REPO}/releases/tags/${TAG}`)
     console.log(`[publish] release 已存在：${release.html_url}`)
+    if (notesPath) {
+      // 已存在的 release 用新的说明覆盖，省得手改。
+      release = await api(`/repos/${owner}/${REPO}/releases/${release.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body }),
+      })
+      console.log('[publish] release 说明已更新')
+    }
   } catch (error) {
     if (error.status !== 404) throw error
     release = await api(`/repos/${owner}/${REPO}/releases`, {

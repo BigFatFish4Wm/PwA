@@ -6,6 +6,7 @@
 - 游戏版本：**v0.111.0**（Windows / Steam）
 - Mod 版本：**1.0.0**（`PwABridge`）
 - World 版本：**1.0.0**（`cortico-world-pwa`，Coopanion API 6）
+- 附带 World：**1.0.0**（`cortico-world-memory`，工作区记忆检索，Coopanion API 6，见 [docs/记忆检索.md](docs/记忆检索.md)）
 
 ## 能做什么
 
@@ -61,11 +62,15 @@
 
 接口细节：[docs/PwA-接口.md](docs/PwA-接口.md)。
 
+另一个 World（`cortico-world-memory`）另给 `memory_search` / `memory_index` / `memory_status` 三个工具，
+检索工作区的 markdown 笔记，不碰游戏。
+
 ## 配置
 
 - Mod：环境变量 `PWA_ENABLED`、`PWA_PORT`、`PWA_PORT_FALLBACK`、`PWA_PUBLISH_ENDPOINT`；
 - 联机：`PWA_COOP=host|client`、`PWA_COOP_INDEX`、`PWA_COOP_ENDPOINT`（默认 `127.0.0.1:33772`）、`PWA_COOP_SESSION`；
-- World：`worlds.pwa.*`，包括 `auto`、`autoEndTurn`、`waitTurnSeconds`、`coopGameRoot`、`coopBrokerPort`、`coopWithClient`。
+- World：`worlds.pwa.*`，包括 `auto`、`autoEndTurn`、`waitTurnSeconds`、`coopGameRoot`、`coopBrokerPort`、`coopWithClient`；
+- 记忆检索：`worlds.memory.*`，包括 `workspace`、`inject`、`topK`、`budgetTokens`、`vector`、`scanSeconds`。
 
 ## 排错
 
@@ -87,13 +92,29 @@ node tools/patch-coopanion-connector.mjs --revert # 还原
 
 改的是 profile 里的 `dist/index.cjs`，**插件升级/重装后要重新执行**，改完需重启桌面端。
 
+## 记忆检索（附带的第二个 World）
+
+`cortico-world-memory` 把工作区里的 markdown 建成本地索引（SQLite FTS5 trigram + 本地向量），
+**每次重建 system 前缀时自动捞几条相关笔记塞进去**，并给一个 `memory_search` 按需翻旧账。
+纯本地、零 API 成本、索引删了自动重建。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\link-world.ps1 -Name cortico-world-memory
+node tools\enable-memory-world.mjs
+# 重启 Coopanion
+```
+
+和 PwA 的 World 互不影响（工具名 `memory_*` 与 `sts2_*` 不冲突，前缀各占一段），可以同时开。
+它不依赖游戏，单独用也成立。机制、配置、验收见 [docs/记忆检索.md](docs/记忆检索.md)。
+
 ## 目录
 
 | 路径 | 内容 |
 |---|---|
 | `PwA/` | Mod 源码（C# / .NET 9 / Harmony） |
 | `cortico-world-pwa/` | World 源码（Node ESM） |
-| `docs/` | 使用教程、接口、联机、复盘 |
+| `cortico-world-memory/` | 记忆检索 World 源码（Node ESM，SQLite FTS5 + 本地向量） |
+| `docs/` | 使用教程、接口、联机、复盘、记忆检索 |
 | `tools/` | 安装、打包、联机、验证脚本 |
 | `release/` | 发布产物（zip） |
 | `VERSIONS.md` | 版本与标签 |

@@ -19,3 +19,10 @@ ref/
 # 本机路径配置（模板见 README）
 local.props
 
+
+# memory index (derived data, rebuild anytime)
+.index/
+**/.index/
+
+# 涓存椂鎺㈤拡
+tmp-probe/

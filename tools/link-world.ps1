@@ -1,13 +1,15 @@
 param(
     [string]$Coopanion = "D:\Program Files\coopanion",
-    [string]$Workspace = "D:\workspace\deepseek\new10-30"
+    [string]$Workspace = "D:\workspace\deepseek\new10-30",
+    [string]$Name = "cortico-world-pwa"
 )
 
-# Link the world package into Coopanion's extensions/node_modules.
+# Link a world package into Coopanion's extensions/node_modules.
+#   -Name cortico-world-memory   links the memory world instead of PwA.
 # ASCII only: Windows PowerShell 5.1 reads BOM-less .ps1 as ANSI.
 $ErrorActionPreference = "Stop"
-$target = Join-Path $Workspace "cortico-world-pwa"
-$link = Join-Path $Coopanion "data\extensions\node_modules\cortico-world-pwa"
+$target = Join-Path $Workspace $Name
+$link = Join-Path $Coopanion "data\extensions\node_modules\$Name"
 
 if (-not (Test-Path $target)) { throw "world package not found: $target" }
 if (Test-Path $link) {
