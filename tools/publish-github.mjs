@@ -92,6 +92,7 @@ function listFiles() {
 async function main() {
   const me = await api('/user')
   const owner = me.login
+  const version = TAG.replace(/^v/, '')
   console.log(`[publish] owner=${owner} repo=${REPO}`)
 
   let repo
