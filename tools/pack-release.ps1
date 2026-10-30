@@ -58,33 +58,11 @@ if (Test-Path $worldZip) { Remove-Item $worldZip -Force }
 Compress-Archive -Path $worldStage -DestinationPath $worldZip
 Write-Output ("[pack] {0} ({1:N0} bytes)" -f $worldZip, (Get-Item $worldZip).Length)
 
-# ---- 记忆检索 World 包：解压后得到 cortico-world-memory\...
-$memSrc = Join-Path $root 'cortico-world-memory'
-$memStage = Join-Path $stageDir 'cortico-world-memory'
-if (Test-Path $memSrc) {
-    New-Item -ItemType Directory -Force -Path $memStage | Out-Null
-    Copy-Item (Join-Path $memSrc 'package.json') $memStage
-    Copy-Item (Join-Path $memSrc 'index.js') $memStage
-    Copy-Item (Join-Path $memSrc 'client.js') $memStage
-    Copy-Item (Join-Path $memSrc 'ENV_PROMPT.md') $memStage
-    Copy-Item (Join-Path $memSrc 'describe.json') $memStage
-    Copy-Item (Join-Path $memSrc 'README.md') $memStage
-    Copy-Item (Join-Path $memSrc 'lib') $memStage -Recurse
-    Copy-Item (Join-Path $root 'LICENSE') $memStage
-
-    $memZip = Join-Path $releaseDir ("cortico-world-memory-{0}.zip" -f $Version)
-    if (Test-Path $memZip) { Remove-Item $memZip -Force }
-    Compress-Archive -Path $memStage -DestinationPath $memZip
-    Write-Output ("[pack] {0} ({1:N0} bytes)" -f $memZip, (Get-Item $memZip).Length)
-}
-
 Remove-Item $stageDir -Recurse -Force
 
 Write-Output '[pack] contents:'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
-$zips = @($modZip, $worldZip)
-if (Test-Path $memZip) { $zips += $memZip }
-foreach ($zip in $zips) {
+foreach ($zip in @($modZip, $worldZip)) {
     Write-Output ("  {0}" -f (Split-Path -Leaf $zip))
     $archive = [System.IO.Compression.ZipFile]::OpenRead($zip)
     try {

@@ -5,7 +5,6 @@
 
 | 版本 | 时间 | 内容 | git 标签 |
 |---|---|---|---|
-| **world-memory 1.0.0** | 2026-10-30 | **新 World `cortico-world-memory`（记忆检索）**：工作区 markdown → 本地 SQLite FTS5(trigram) 索引 + 本地向量；每次重建前缀自动注入 top-5（硬上限 2000 token、连续两轮不重复）；`memory_search` / `memory_index` / `memory_status`；frontmatter `status`/`supersedes` 作废旧事实；引用计数 + 时间衰减；索引不可用时静默退回 grep。对应 `memory-retrieval-spec-2026-10-30.md`；90 项端到端测试（含真实工作区 99 篇 / 6537 段） | `v1.1.0` |
 | **1.0.0** | 2026-10-30 | **首个发布版**：单人全流程 + 本机双窗口联机（broker 传输）可用；`release/` 提供 `PwABridge-1.0.0.zip` 与 `cortico-world-pwa-1.0.0.zip`，附《使用教程》《发布说明》 | `v1.0.0` |
 | 0.1.0 | 2026-10-30 | Mod 骨架：MCP + REST、状态快照、战斗/地图/事件/宝箱/营火/奖励/商店/选牌动作 | `v0.1.0` |
 | 0.1.1 | 2026-10-30 | 主菜单/单人子菜单导航、状态分区容错、卡牌文本代入实际数值、事件结束可 proceed、点击方式按控件类型区分 | `v0.1.1` |

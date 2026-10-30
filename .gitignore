@@ -12,17 +12,12 @@ tmp-apidump/
 Thumbs.db
 desktop.ini
 
-# ²Î¿¼´úÂë£¨CouchCoop Ô´Âë£¬½ö±¾µØ²éÔÄ£©
+# å‚è€ƒä»£ç ï¼ˆCouchCoop æºç ï¼Œä»…æœ¬åœ°æŸ¥é˜…ï¼‰
 ref/
 
 
-# ±¾»úÂ·¾¶ÅäÖÃ£¨Ä£°å¼û README£©
+# æœ¬æœºè·¯å¾„é…ç½®ï¼ˆæ¨¡æ¿è§ READMEï¼‰
 local.props
-
-
-# memory index (derived data, rebuild anytime)
-.index/
-**/.index/
 
 # ä¸´æ—¶æ¢é’ˆ
 tmp-probe/

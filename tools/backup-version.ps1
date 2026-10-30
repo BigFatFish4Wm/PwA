@@ -32,7 +32,7 @@ if (Test-Path $gameMods) {
 # ---- what Coopanion loads as Worlds (the extension dir is a set of junctions;
 #      resolve them so the snapshot is real files, not links back to the repo)
 $worlds = @()
-foreach ($name in @("cortico-world-pwa", "cortico-world-memory")) {
+foreach ($name in @("cortico-world-pwa")) {
     $link = Join-Path $extensions $name
     if (-not (Test-Path $link)) { continue }
     $item = Get-Item $link -Force
@@ -79,12 +79,9 @@ $lines += @(
     "1. Check out the tag above (git checkout $Tag).",
     "2. Mod: copy installed-PwABridge\* back to $gameMods, then restart the game.",
     "3. World: copy installed-worlds\<name> over the extension directory, or re-link",
-    "   with: powershell -ExecutionPolicy Bypass -File tools\link-world.ps1 -Name <name>",
+    "   with: powershell -ExecutionPolicy Bypass -File tools\link-world.ps1",
     "4. Config: copy config.json back to $deploymentConfig (it holds worlds.*.enabled).",
-    "5. Restart Coopanion so the Worlds are loaded again.",
-    "",
-    "Note: the memory World's index lives in the workspace (<workspace>\.index\memory.db)",
-    "and is not part of this snapshot; it rebuilds from the markdown files on the next scan."
+    "5. Restart Coopanion so the Worlds are loaded again."
 )
 Set-Content -Path (Join-Path $backup "SNAPSHOT.md") -Value $lines -Encoding utf8
 
