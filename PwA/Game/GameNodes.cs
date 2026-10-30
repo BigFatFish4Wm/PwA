@@ -96,9 +96,15 @@ internal static class GameNodes
                 return Screen.CardSelection;
             }
 
-            if (screen is NGameOverScreen)
+            // 结算页有时只是「还挂在树上但已隐藏」，隐藏了就不算。
+            if (screen is NGameOverScreen gameOverScreen && gameOverScreen.IsVisibleInTree())
             {
                 return Screen.GameOver;
+            }
+
+            if (screen is NCharacterSelectScreen characterSelectScreen && !characterSelectScreen.IsVisibleInTree())
+            {
+                screen = null;
             }
 
             // 奖励面板是覆盖层，Boss 结算时会盖在仍然处于 ActiveCombat 的战斗房间上，必须先判它。
@@ -147,7 +153,8 @@ internal static class GameNodes
                 }
             }
 
-            var mapped = screen switch
+            var mapped = screen is CanvasItem mappedCanvas && mappedCanvas.IsVisibleInTree()
+                ? screen switch
             {
                 NRewardsScreen => Screen.Reward,
                 NCardRewardSelectionScreen => Screen.Reward,
@@ -166,7 +173,8 @@ internal static class GameNodes
                 NSubmenu => Screen.MainMenu,
                 NLogoAnimation => Screen.MainMenu,
                 _ => null,
-            };
+                }
+                : null;
 
             // ActiveScreenContext 有时给 null 或给不到房间节点（进事件/读档/转场时都遇到过），
             // 这时按「树上可见的界面节点」兜底判断，否则会停在 UNKNOWN 什么也做不了。

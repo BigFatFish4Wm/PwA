@@ -28,6 +28,7 @@ internal static class GameApi
             ["my_turn"] = PulseCache.MyTurn,
             ["can_act"] = PulseCache.CanAct,
             ["floor"] = PulseCache.Floor,
+            ["events_seq"] = EventRing.LastSeq,
             ["cached_ms"] = PulseCache.UpdatedAtTicks == 0
                 ? -1
                 : (long)(DateTime.UtcNow - new DateTime(PulseCache.UpdatedAtTicks, DateTimeKind.Utc)).TotalMilliseconds,

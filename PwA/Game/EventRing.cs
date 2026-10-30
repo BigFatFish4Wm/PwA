@@ -74,6 +74,7 @@ internal static class StatePulse
 {
     private static Timer? _timer;
     private static string _lastKey = string.Empty;
+    private static string _lastAttentionKey = string.Empty;
 
     public static void Start()
     {
@@ -104,6 +105,23 @@ internal static class StatePulse
             var readiness = await GameThread.InvokeAsync(StateBuilder.Readiness);
             var runState = await GameThread.InvokeAsync(StateBuilder.HasRun);
             PulseCache.Update(lite, readiness["my_turn"]?.GetValue<bool>() == true, readiness["can_act"]?.GetValue<bool>() == true, runState);
+
+            // 「现在是不是在等我操作」：与轻量局面分开算，避免平台差异导致漏推。
+            var attention = await GameThread.InvokeAsync(StateBuilder.BuildAttention);
+            var attentionKind = attention?["kind"]?.GetValue<string>();
+            var attentionKey = string.Join('|',
+                attentionKind ?? "-",
+                attention?["screen"]?.GetValue<string>() ?? "-",
+                attention?["turn"]?.GetValue<int>() ?? 0,
+                attention?["detail"]?.GetValue<string>() ?? "-");
+            if (attentionKey != _lastAttentionKey)
+            {
+                _lastAttentionKey = attentionKey;
+                if (!string.IsNullOrEmpty(attentionKind) && attention != null)
+                {
+                    EventRing.Record("attention", attention);
+                }
+            }
 
             var key = lite.ToJsonString();
             if (key == _lastKey)

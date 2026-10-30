@@ -79,11 +79,13 @@ const GIT_BIN = process.env.GIT_BIN
 
 function listFiles() {
   const out = execFileSync(GIT_BIN, ['-c', 'core.quotepath=false', 'ls-files'], { cwd: ROOT, encoding: 'utf8' })
+  // 只发布 PwA 自己的东西：工作区后来混进了 _coopanion、cortico-world-memory 等大目录。
+  const allow = /^(PwA\/|cortico-world-pwa\/|docs\/|tools\/|README\.md$|LICENSE$|THIRD_PARTY_NOTICES\.md$|VERSIONS\.md$|\.gitignore$)/
   return out
     .split(/\r?\n/)
     .filter(Boolean)
-    .filter((path) => !/^(backups|ref|release|tmp|\.dsh)/.test(path))
-    .filter((path) => !path.startsWith('PwA-mod-'))
+    .filter((path) => allow.test(path))
+    .filter((path) => !path.includes('/node_modules/'))
     .filter((path) => existsSync(join(ROOT, path)))
 }
 
@@ -234,7 +236,7 @@ async function main() {
 
   const releaseDir = join(ROOT, 'release')
   const existingAssets = new Set((release.assets ?? []).map((asset) => asset.name))
-  for (const name of readdirSync(releaseDir).filter((item) => item.endsWith('.zip'))) {
+  for (const name of readdirSync(releaseDir).filter((item) => item.endsWith(`-${version}.zip`))) {
     if (existingAssets.has(name)) {
       console.log(`[publish] 资产已存在，跳过 ${name}`)
       continue

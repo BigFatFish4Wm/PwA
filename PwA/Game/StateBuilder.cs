@@ -45,6 +45,7 @@ internal static class StateBuilder
         var screen = GameNodes.ResolveScreen();
         var me = combatState != null ? SafeMe(combatState) : null;
         var canAct = me != null && combat.IsInProgress && combat.IsPartOfPlayerTurn(me);
+        var playPhase = me?.PlayerCombatState?.Phase == PlayerTurnPhase.Play;
 
         return new JsonObject
         {
@@ -52,7 +53,7 @@ internal static class StateBuilder
             ["turn"] = turn,
             ["in_combat"] = combat.IsInProgress && (combatState?.Enemies.Count ?? 0) > 0,
             ["choice"] = PromptKind(screen),
-            ["turn_started"] = canAct && !combat.PlayerActionsDisabled,
+            ["turn_started"] = canAct && playPhase && !combat.PlayerActionsDisabled,
             ["floor"] = runState?.TotalFloor ?? 0,
         };
     }
@@ -69,6 +70,180 @@ internal static class StateBuilder
         Screen.Modal => "modal",
         _ => null,
     };
+
+    /// <summary>
+    /// 「现在是不是在等我操作」的粗粒度描述。同一局面只有一个 kind，只有 kind/细节变化才推事件，
+    /// 这样「界面已经等你按了但没有新事件」的情况（奖励、事件继续、地图、宝箱、营火、选牌…）都能提醒到。
+    /// </summary>
+    public static JsonObject BuildAttention()
+    {
+        var screen = GameNodes.ResolveScreen();
+        var combat = CombatManager.Instance;
+        var combatState = TryCombatState();
+        var me = combatState != null ? SafeMe(combatState) : null;
+        var turn = combatState?.RoundNumber ?? 0;
+        string? kind = null;
+        string? detail = null;
+
+        try
+        {
+            switch (screen)
+            {
+                case Screen.Combat:
+                {
+                    var myTurn = me != null && combat.IsInProgress && combat.IsPartOfPlayerTurn(me);
+                    var phase = me?.PlayerCombatState?.Phase ?? PlayerTurnPhase.None;
+                    if (myTurn && phase == PlayerTurnPhase.Play && !combat.PlayerActionsDisabled)
+                    {
+                        kind = "my_turn";
+                        detail = $"第 {turn} 回合";
+                    }
+
+                    break;
+                }
+
+                case Screen.CardSelection:
+                {
+                    kind = "selection";
+                    var selection = Safe(BuildSelection, "selection");
+                    var selectionKind = selection?["kind"]?.GetValue<string>() ?? "card";
+                    var prompt = selection?["prompt"]?.GetValue<string>();
+                    detail = string.IsNullOrWhiteSpace(prompt) ? selectionKind : $"{selectionKind} · {prompt}";
+                    break;
+                }
+
+                case Screen.Reward:
+                {
+                    var reward = Safe(BuildReward, "reward");
+                    if (reward?["card_choice"]?.GetValue<bool>() == true)
+                    {
+                        kind = "reward_card";
+                        detail = "等你挑一张奖励牌（或跳过）";
+                    }
+                    else if ((reward?["rewards"] as JsonArray)?.Any(item => item?["claimable"]?.GetValue<bool>() == true) == true)
+                    {
+                        kind = "reward";
+                        detail = "有奖励可以领";
+                    }
+                    else if (reward?["can_proceed"]?.GetValue<bool>() == true)
+                    {
+                        kind = "reward_proceed";
+                        detail = "奖励领完了，可以继续";
+                    }
+
+                    break;
+                }
+
+                case Screen.Event:
+                {
+                    var ev = Safe(BuildEvent, "event");
+                    if (ev?["finished"]?.GetValue<bool>() == true)
+                    {
+                        kind = "event_proceed";
+                        detail = "事件结束，等你继续";
+                    }
+                    else if ((ev?["options"] as JsonArray)?.Any(option => option?["locked"]?.GetValue<bool>() != true) == true)
+                    {
+                        kind = "event_option";
+                        detail = ev?["title"]?.GetValue<string>() is { Length: > 0 } title ? title : "等你选选项";
+                    }
+
+                    break;
+                }
+
+                case Screen.Map:
+                {
+                    var map = Safe(BuildMap, "map");
+                    if (map?["traveling"]?.GetValue<bool>() == true)
+                    {
+                        kind = "map_travel";
+                        detail = "已经出发";
+                    }
+                    else if ((map?["options"] as JsonArray)?.Count > 0)
+                    {
+                        kind = "map";
+                        detail = "等你选路/投票";
+                    }
+
+                    break;
+                }
+
+                case Screen.Chest:
+                {
+                    var chest = Safe(BuildChest, "chest");
+                    if (chest?["opened"]?.GetValue<bool>() != true)
+                    {
+                        kind = "chest_open";
+                        detail = "等你开箱";
+                    }
+                    else if ((chest?["relics"] as JsonArray)?.Count > 0)
+                    {
+                        kind = "chest_relic";
+                        detail = "等你选遗物";
+                    }
+                    else if (chest?["can_proceed"]?.GetValue<bool>() == true)
+                    {
+                        kind = "chest_proceed";
+                        detail = "可以继续";
+                    }
+
+                    break;
+                }
+
+                case Screen.Rest:
+                {
+                    var rest = Safe(BuildRest, "rest");
+                    if ((rest?["options"] as JsonArray)?.Count > 0)
+                    {
+                        kind = "rest_option";
+                        detail = "等你选营火选项";
+                    }
+                    else if (rest?["can_proceed"]?.GetValue<bool>() == true)
+                    {
+                        kind = "rest_proceed";
+                        detail = "可以继续";
+                    }
+
+                    break;
+                }
+
+                case Screen.Modal:
+                {
+                    var modal = Safe(BuildModal, "modal");
+                    kind = "modal";
+                    detail = modal?["type"]?.GetValue<string>();
+                    break;
+                }
+
+                case Screen.CharacterSelect:
+                    kind = "character_select";
+                    detail = "等你选角色";
+                    break;
+
+                case Screen.GameOver:
+                    kind = "game_over";
+                    detail = "结算页等你操作";
+                    break;
+
+                case Screen.SingleplayerMenu:
+                    kind = "singleplayer_menu";
+                    detail = "单人菜单";
+                    break;
+            }
+        }
+        catch
+        {
+            // 截屏/查询失败时宁可当「没有在等我」，也不要抛给脉冲线程
+        }
+
+        return new JsonObject
+        {
+            ["kind"] = kind,
+            ["screen"] = screen,
+            ["turn"] = turn,
+            ["detail"] = detail,
+        };
+    }
 
     public static JsonObject Build()
     {

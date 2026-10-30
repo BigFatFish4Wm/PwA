@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.0.0'
+const WORLD_BUILD = '1.1.0'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */
@@ -535,6 +535,8 @@ function create(ctx) {
   let host = null
   let timer = null
   let lastSeq = 0
+  let lastAttentionKey = ''
+  let lastAttentionAt = 0
   let lastState = null
   let lastKey = ''
   let lastBase = ''
@@ -594,7 +596,6 @@ function create(ctx) {
   async function fetchState() {
     const raw = await request('/state')
     const compact = compactState(raw)
-    lastSeq = Math.max(lastSeq, Number(raw?.seq) ?? 0)
     return compact
   }
 
@@ -604,6 +605,11 @@ function create(ctx) {
     const result = await httpJson(base, '/health', { timeoutMs: Math.min(cfg().timeoutMs, 3000) })
     lastHealth = result.ok ? result.json : null
     if (result.ok) lastOkAt = Date.now()
+    const eventSeq = Number(lastHealth?.events_seq)
+    if (Number.isFinite(eventSeq) && eventSeq >= 0) {
+      // 游戏重启后事件序号归零：回退超过 5 就当新进程，重置游标。
+      lastSeq = eventSeq < lastSeq - 5 ? eventSeq : Math.max(lastSeq, eventSeq)
+    }
     return lastHealth
   }
 
@@ -995,8 +1001,27 @@ function create(ctx) {
       const result = await httpJson(base, `/events?since=${lastSeq}`, { timeoutMs: Math.min(cfg().timeoutMs, 4000) })
       if (!result.ok || !result.json) return
       const events = result.json.events ?? []
-      lastSeq = Math.max(lastSeq, Number(result.json.last_seq) ?? 0)
+      if (process.env.PWA_DEBUG_POLL === '1') console.log(`[poll] base=${base} since=${lastSeq} events=${events.length} types=${events.map((event) => event.type).join(',')}`)
+      const reported = Number(result.json.last_seq) ?? 0
+      if (reported < lastSeq) {
+        // 游戏重启：事件序号归零，重置游标，避免永远收不到新事件。
+        if (process.env.PWA_DEBUG_POLL === '1') console.log(`[poll] seq 回退 ${lastSeq} -> ${reported}，按新进程处理`)
+        lastSeq = reported
+        return
+      }
+      const hasAttention = events.some((event) => event.type === 'attention')
+      lastSeq = Math.max(lastSeq, reported)
       for (const event of events) {
+        if (hasAttention && (event.type === 'turn_started' || event.type === 'player_choice_required')) {
+          continue
+        }
+        if (event.type === 'attention') {
+          const data = event.data ?? {}
+          const key = `${data.kind}|${data.screen}|${data.turn}|${data.detail}`
+          if (key === lastAttentionKey && Date.now() - lastAttentionAt < 6000) continue
+          lastAttentionKey = key
+          lastAttentionAt = Date.now()
+        }
         const text = describeEvent(event)
         if (!text) continue
         await host.pushEvent(
@@ -1009,15 +1034,41 @@ function create(ctx) {
           { trigger: 'debounce' },
         )
       }
-    } catch {
+    } catch (error) {
+      if (process.env.PWA_DEBUG_POLL === '1') console.log(`[poll] 失败: ${error?.message ?? error}`)
       // 游戏没开、切场景、端口变了：下一轮再试。
     } finally {
       inflight = false
     }
   }
 
+  const ATTENTION_TEXT = {
+    my_turn: (data) => `轮到你了（${data.detail ?? '你的回合'}）：用 ${TOOL_PREFIX}view 看局面，${TOOL_PREFIX}act 出牌。`,
+    selection: (data) => `需要你选牌：${data.detail ?? '选牌界面'}。用 ${TOOL_PREFIX}view 看候选，${TOOL_PREFIX}act select_card。`,
+    reward_card: () => '战斗奖励：等你挑一张牌（或跳过）。',
+    reward: () => '战斗结束，有奖励可以领：金币/药水/卡牌。',
+    reward_proceed: () => '奖励领完了，可以继续。',
+    event_option: (data) => `事件等你选选项${data.detail ? '：' + data.detail : ''}。`,
+    event_proceed: () => '事件结束了，等你按继续（proceed）。',
+    map: () => '地图等你选路/投票。',
+    map_travel: () => '地图已经出发。',
+    chest_open: () => '宝箱等你打开。',
+    chest_relic: () => '宝箱等你选遗物。',
+    chest_proceed: () => '宝箱拿完了，可以继续。',
+    rest_option: () => '营火等你选（休息/升级/移除…）。',
+    rest_proceed: () => '营火选完了，可以继续。',
+    modal: (data) => `有个弹窗等你处理${data.detail ? '：' + data.detail : ''}。`,
+    character_select: () => '等你选角色。',
+    game_over: () => '结算页等你操作。',
+    singleplayer_menu: () => null,
+  }
+
   function describeEvent(event) {
     const data = event.data ?? {}
+    if (event.type === 'attention') {
+      const build = ATTENTION_TEXT[data.kind]
+      return build ? build(data) : null
+    }
     if (event.type === 'turn_started') {
       return `轮到你了：第 ${data.turn ?? '?'} 回合（${data.screen ?? '?'}）。用 ${TOOL_PREFIX}view 看局面，${TOOL_PREFIX}act 出牌。`
     }
