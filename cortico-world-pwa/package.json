@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-pwa",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "description": "Slay the Spire 2 bridge for Cortico/Coopanion (PwA mod)",
