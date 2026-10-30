@@ -1,0 +1,21 @@
+# 鏋勫缓浜х墿
+**/bin/
+**/obj/
+
+# 鏈湴涓存椂
+tmp-apidump/
+.dsh-token-cost/
+*.user
+*.log
+
+# 绯荤粺
+Thumbs.db
+desktop.ini
+
+# 参考代码（CouchCoop 源码，仅本地查阅）
+ref/
+
+
+# 本机路径配置（模板见 README）
+local.props
+

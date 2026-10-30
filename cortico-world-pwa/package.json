@@ -1,0 +1,21 @@
+{
+  "name": "cortico-world-pwa",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Slay the Spire 2 bridge for Cortico/Coopanion (PwA mod)",
+  "author": "PwA contributors",
+  "license": "MIT",
+  "main": "./index.js",
+  "keywords": ["cortico-world"],
+  "engines": {
+    "node": ">=22"
+  },
+  "cortico": {
+    "kind": "world",
+    "api": 6,
+    "webUiClient": "dist/webui.js",
+    "displayName": "杀戮尖塔 2（PwA）",
+    "description": "通过 PwA 桥接 Mod 读局面、出牌、推进流程；只提供动作，不做决策。"
+  }
+}
