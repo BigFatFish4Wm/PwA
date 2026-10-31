@@ -8,12 +8,12 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { spawn } from 'node:child_process'
 import { join } from 'node:path'
-import { homedir, tmpdir } from 'node:os'
+import { homedir, tmpdir, networkInterfaces } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.2.0'
+const WORLD_BUILD = '1.3.0'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */
@@ -364,6 +364,8 @@ function defaults() {
     coopBrokerPort: 33772,
     coopBind: '127.0.0.1',
     coopToken: '',
+    coopLocalClients: 1,
+    coopRemoteSlots: 0,
     coopClients: 1,
     coopSession: 'pwa',
     coopWithClient: true,
@@ -376,7 +378,18 @@ const COOP_CLIENT_PORT = 8092
 
 /** 一键联机：拉起 host 窗口（自己开中继）和 client 窗口，等两边 Mod 就绪。 */
 function createCoopLauncher(cfg) {
-  const state = { phase: 'stopped', hostPid: null, clientPid: null, detail: '', startedAt: null }
+  const state = {
+    phase: 'stopped',
+    hostPid: null,
+    clientPid: null,
+    localClients: 1,
+    remoteSlots: 0,
+    remoteToken: '',
+    remoteBind: '127.0.0.1',
+    remoteConnected: 0,
+    detail: '',
+    startedAt: null,
+  }
 
   const gameRoot = () => cfg().coopGameRoot || DEFAULT_GAME_ROOT
   const bind = () => cfg().coopBind || '127.0.0.1'
@@ -385,6 +398,34 @@ function createCoopLauncher(cfg) {
   const session = () => cfg().coopSession || 'pwa'
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+  /** 本机可给远程玩家用的局域网地址。 */
+  function lanAddresses() {
+    const addresses = []
+    for (const entries of Object.values(networkInterfaces())) {
+      for (const entry of entries ?? []) {
+        if (entry.family === 'IPv4' && !entry.internal) addresses.push(entry.address)
+      }
+    }
+    return addresses
+  }
+
+  function remoteCommand(endpoint, secret, index = 2) {
+    return [
+      'set PWA_COOP=client',
+      `set PWA_COOP_INDEX=${index}`,
+      `set PWA_COOP_ENDPOINT=${endpoint}`,
+      `set PWA_COOP_TOKEN=${secret}`,
+      `SlayTheSpire2.exe --force-steam off --clientId ${1000 + index} -fastmp join`,
+    ].join('\r\n')
+  }
+
+  function makeToken() {
+    const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'
+    let value = ''
+    for (let i = 0; i < 8; i += 1) value += alphabet[Math.floor(Math.random() * alphabet.length)]
+    return value
+  }
 
   async function health(portNumber) {
     try {
@@ -433,11 +474,18 @@ function createCoopLauncher(cfg) {
   async function start(options = {}) {
     if (state.phase === 'running') return snapshot()
     const withClient = options.withClient ?? cfg().coopWithClient !== false
-    const clientCount = Math.max(1, Math.min(3, Number(options.clients ?? cfg().coopClients ?? 1)))
+    // 本机窗口：host 固定 1 个，client 第 1 个永远是汐；第二个只是本机模拟远程时用。
+    const localClients = Math.max(1, Math.min(2, Number(options.localClients ?? cfg().coopLocalClients ?? 1)))
+    const remoteSlots = Math.max(0, Math.min(2, Number(options.remoteSlots ?? cfg().coopRemoteSlots ?? 0)))
     const bindAddress = options.bind ?? bind()
-    const secret = options.token ?? token()
+    let secret = options.token ?? token()
+    if (remoteSlots > 0 && !secret) secret = makeToken()
+    state.localClients = localClients
+    state.remoteSlots = remoteSlots
+    state.remoteToken = secret
+    state.remoteBind = bindAddress
     state.phase = 'starting'
-    state.detail = `拉起 host（中继 127.0.0.1:${port()}）…`
+    state.detail = `拉起 host（中继 ${bindAddress}:${port()}）…`
 
     const existingHost = await health(COOP_HOST_PORT)
     if (existingHost?.role === 'host') {
@@ -456,8 +504,8 @@ function createCoopLauncher(cfg) {
     }
 
     if (withClient) {
-      for (let i = 1; i <= clientCount; i += 1) {
-        state.detail = `拉起 client ${i}/${clientCount}…`
+      for (let i = 1; i <= localClients; i += 1) {
+        state.detail = `拉起本机 client ${i}/${localClients}${i === 1 ? '（汐）' : '（本地模拟远程）'}…`
         const portNumber = COOP_CLIENT_PORT + (i - 1)
         const existing = await health(portNumber)
         if (existing?.role === 'client') {
@@ -480,15 +528,17 @@ function createCoopLauncher(cfg) {
 
     state.phase = 'running'
     state.startedAt = Date.now()
-    state.detail = withClient ? '两个窗口都就绪：你玩 8091，汐连 8092' : 'host 就绪（8091）'
+    state.detail = remoteSlots > 0
+      ? `本机两窗口就绪；远程位 ${remoteSlots} 个等你把口令/地址发出去`
+      : '本机两窗口就绪：你玩 8091，汐连 8092'
     await sleep(600)
     return snapshot()
   }
 
-  /** 当前活着的联机窗口 pid：8021/8022 两个角色端口上 /health 报的 pid 最可靠。 */
+  /** 当前活着的联机窗口 pid：各角色端口上 /health 报的 pid 最可靠。 */
   async function liveCoopPids() {
     const pids = []
-    for (const portNumber of [COOP_HOST_PORT, COOP_CLIENT_PORT]) {
+    for (const portNumber of [COOP_HOST_PORT, COOP_CLIENT_PORT, COOP_CLIENT_PORT + 1, COOP_CLIENT_PORT + 2]) {
       const body = await health(portNumber)
       if (body && (body.role === 'host' || body.role === 'client') && Number(body.pid) > 0) {
         pids.push(Number(body.pid))
@@ -511,14 +561,30 @@ function createCoopLauncher(cfg) {
   }
 
   function snapshot() {
+    const remoteSlots = state.remoteSlots ?? 0
+    const secret = state.remoteToken ?? token()
+    const bindAddress = state.remoteBind ?? bind()
+    const endpoints = bindAddress === '0.0.0.0'
+      ? lanAddresses().map((address) => `${address}:${port()}`)
+      : []
+    const example = endpoints[0] ?? `<隧道地址>:${port()}`
     return {
       phase: state.phase,
       hostPid: state.hostPid,
       clientPid: state.clientPid,
+      localClients: state.localClients ?? 1,
       ports: { host: COOP_HOST_PORT, client: COOP_CLIENT_PORT, broker: port() },
       session: session(),
       detail: state.detail,
       stoppable: Boolean(state.hostPid || state.clientPid),
+      remote: {
+        slots: remoteSlots,
+        connected: state.remoteConnected ?? 0,
+        token: remoteSlots > 0 ? secret : '',
+        bind: bindAddress,
+        endpoints,
+        command: remoteSlots > 0 ? remoteCommand(example, secret) : '',
+      },
     }
   }
 
@@ -529,12 +595,15 @@ function createCoopLauncher(cfg) {
     if (host || client) {
       state.phase = host && (!cfg().coopWithClient || client) ? 'running' : 'partial'
     }
+    const peers = Array.isArray(host?.coop_peers) ? host.coop_peers.map(Number) : []
+    state.remoteConnected = peers.filter((index) => index > (state.localClients ?? 1)).length
     const snapshotValue = snapshot()
     return {
       ...snapshotValue,
       stoppable: snapshotValue.stoppable || discovered.length > 0,
-      host: host ? { role: host.role, screen: host.screen } : null,
-      client: client ? { role: client.role, screen: client.screen } : null,
+      peers,
+      host: host ? { role: host.role, screen: host.screen, pid: host.pid } : null,
+      client: client ? { role: client.role, screen: client.screen, pid: client.pid } : null,
     }
   }
 
@@ -1237,16 +1306,17 @@ function create(ctx) {
       parameters: {
         type: 'object',
         properties: {
-          withClient: { type: 'boolean', description: '是否同时拉起 client 窗口（默认按配置，true）' },
-          clients: { type: 'integer', description: '本地 client 窗口数量 1–3（含汐；第三人远程则设 1）' },
-          bind: { type: 'string', description: 'broker 绑定地址，远程玩家连进来时用 0.0.0.0' },
-          token: { type: 'string', description: '共享口令，远程玩家必须一致' },
+          withClient: { type: 'boolean', description: '是否同时拉起本机 client 窗口（默认 true）' },
+          localClients: { type: 'integer', description: '本机 client 窗口数 1–2：第 1 个永远是汐，第 2 个只用于本机模拟远程' },
+          remoteSlots: { type: 'integer', description: '远程位 0–2：对方在自己机器上开窗口，不占本机资源' },
+          bind: { type: 'string', description: 'broker 绑定地址；内网穿透保持 127.0.0.1，直连局域网用 0.0.0.0' },
+          token: { type: 'string', description: '共享口令；远程位>0 时不给会自动生成' },
         },
         additionalProperties: false,
       },
       tags: ['write', 'act'],
       barrierAfter: true,
-      handler: async (args) => fit(await coop.start({ withClient: args.withClient })),
+      handler: async (args) => fit(await coop.start({ withClient: args.withClient, localClients: args.localClients, remoteSlots: args.remoteSlots, bind: args.bind, token: args.token })),
     },
     {
       name: `${TOOL_PREFIX}coop_stop`,
@@ -1320,7 +1390,7 @@ function create(ctx) {
         }],
         invoke: async (panel, method, args) => {
           if (panel !== 'coop') throw new Error(`unknown panel: ${panel}`)
-          if (method === 'start') return coop.start(args?.[0] ?? {})
+          if (method === 'start') return coop.start(Array.isArray(args) ? (args[0] ?? {}) : (args ?? {}))
           if (method === 'stop') return coop.stop()
           if (method === 'state') return coop.status()
           throw new Error(`unknown method: ${method}`)
@@ -1402,6 +1472,26 @@ function create(ctx) {
                 type: 'boolean',
                 title: zh ? '同时拉起 client 窗口' : 'Also start client window',
                 description: zh ? '默认开；只开 host 时关掉。' : 'Default on.',
+              },
+              'worlds.pwa.coopLocalClients': {
+                type: 'integer',
+                title: zh ? '本机 client 窗口数' : 'Local client windows',
+                description: zh ? '1–2；第 1 个永远是汐，第 2 个只用于本机模拟远程。默认 1。' : '1–2; first is the agent, second is local remote simulation. Default 1.',
+              },
+              'worlds.pwa.coopRemoteSlots': {
+                type: 'integer',
+                title: zh ? '远程位数量' : 'Remote slots',
+                description: zh ? '0–2；只影响发给远程玩家的口令/命令，不占本机资源。默认 0。' : '0–2; only affects the shared token/command, no local windows. Default 0.',
+              },
+              'worlds.pwa.coopBind': {
+                type: 'string',
+                title: zh ? 'broker 绑定地址' : 'Broker bind address',
+                description: zh ? '默认 127.0.0.1（配内网穿透）；局域网直连填 0.0.0.0。' : 'Default 127.0.0.1 (tunnel); use 0.0.0.0 for LAN.',
+              },
+              'worlds.pwa.coopToken': {
+                type: 'string',
+                title: zh ? '远程口令' : 'Remote token',
+                description: zh ? '留空时按远程位自动生成；所有远程玩家必须一致。' : 'Empty = auto-generate when remote slots > 0.',
               },
             },
           },

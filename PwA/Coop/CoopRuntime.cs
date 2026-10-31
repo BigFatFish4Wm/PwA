@@ -82,6 +82,25 @@ public static class CoopRuntime
         }
     }
 
+    /// <summary>relay 上当前注册的窗口下标；HTTP 线程可安全调用。</summary>
+    public static int[] PeerIndices()
+    {
+        var relay = _relay;
+        if (relay == null)
+        {
+            return Array.Empty<int>();
+        }
+
+        try
+        {
+            return relay.ClientIndices;
+        }
+        catch
+        {
+            return Array.Empty<int>();
+        }
+    }
+
     private static void InstallPatches()
     {
         try

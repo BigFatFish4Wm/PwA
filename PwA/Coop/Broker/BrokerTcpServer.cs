@@ -25,6 +25,21 @@ public sealed class BrokerTcpServer : IAsyncDisposable
         _log = log;
     }
 
+    /// <summary>当前已注册的窗口下标（含 host 的 0），供 /health 展示远程位占用。</summary>
+    public int[] ClientIndices
+    {
+        get
+        {
+            lock (_stateLock)
+            {
+                return _session.Clients
+                    .Select(client => client.ClientIndex)
+                    .OrderBy(index => index)
+                    .ToArray();
+            }
+        }
+    }
+
     public int Port
     {
         get

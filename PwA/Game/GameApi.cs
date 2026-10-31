@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using MegaCrit.Sts2.Core.Logging;
 using PwA.Server;
+using PwA.Coop;
 
 namespace PwA.Game;
 
@@ -29,6 +30,7 @@ internal static class GameApi
             ["can_act"] = PulseCache.CanAct,
             ["floor"] = PulseCache.Floor,
             ["events_seq"] = EventRing.LastSeq,
+            ["coop_peers"] = new JsonArray(CoopRuntime.PeerIndices().Select(index => (JsonNode?)JsonValue.Create(index)).ToArray()),
             ["cached_ms"] = PulseCache.UpdatedAtTicks == 0
                 ? -1
                 : (long)(DateTime.UtcNow - new DateTime(PulseCache.UpdatedAtTicks, DateTimeKind.Utc)).TotalMilliseconds,
