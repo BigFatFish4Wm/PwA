@@ -14,11 +14,13 @@ public sealed class BrokerTcpServer : IAsyncDisposable
     private readonly List<BrokerEnvelope> _pendingHostEnvelopes = [];
     private readonly object _stateLock = new();
     private readonly Action<string>? _log;
+    private readonly string? _requiredToken;
     private Task? _acceptLoop;
 
-    public BrokerTcpServer(string sessionId, IPAddress address, int port, Action<string>? log = null)
+    public BrokerTcpServer(string sessionId, IPAddress address, int port, Action<string>? log = null, string? requiredToken = null)
     {
         _session = new InMemoryBrokerSession(sessionId);
+        _requiredToken = string.IsNullOrWhiteSpace(requiredToken) ? null : requiredToken;
         _listener = new TcpListener(address, port);
         _log = log;
     }
@@ -113,6 +115,13 @@ public sealed class BrokerTcpServer : IAsyncDisposable
                     }
 
                     var registration = BrokerClientRegistration.FromDto(message.Registration);
+                    if (_requiredToken != null && !string.Equals(message.Registration.Token, _requiredToken, StringComparison.Ordinal))
+                    {
+                        var tokenReason = "Broker registration rejected: token mismatch.";
+                        _log?.Invoke($"Broker registration rejected: client={message.Registration.ClientId} reason=token");
+                        await BrokerFrameCodec.WriteAsync(stream, BrokerTransportMessage.ForRegistrationRejected(tokenReason), cancellationToken);
+                        return;
+                    }
                     if (message.Registration.ProtocolVersion != BrokerProtocol.CurrentVersion)
                     {
                         var reason = $"Unsupported broker protocol version {message.Registration.ProtocolVersion}; expected {BrokerProtocol.CurrentVersion}.";

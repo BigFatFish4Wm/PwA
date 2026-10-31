@@ -72,3 +72,51 @@ World 的自动发现会优先选 client；`sts2_diag` 里能看到 `role` 和 `
 - 只支持一个 host + 一个 client（多客户端协议上支持，但还没测）。
 - 手柄/键鼠分配没做：两个窗口都用键鼠，操作哪个窗口哪个窗口响应。
 - 长跑稳定性（多幕、事件、奖励、药水）还在验证中。
+
+## 三人房 / 远程玩家（1.2.0+）
+
+默认只监听 `127.0.0.1`。要让别人从别的机器连进来，主机设两个环境变量：
+
+```powershell
+# 主机窗口（自己开中继，并监听所有网卡）
+PWA_COOP=host
+PWA_COOP_BIND=0.0.0.0
+PWA_COOP_TOKEN=自己定一个口令
+PWA_COOP_SESSION=pwa
+```
+
+一键脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\start-coop.ps1 -Bind 0.0.0.0 -Token '<口令>' -Clients 1
+```
+
+`-Clients 1` = 本地只开汐那一个 client；第三人是远程玩家。
+
+### 远程玩家的机器
+
+需要：Windows + 《杀戮尖塔 2》v0.111.0 + 安装同一个 PwA Mod（发布包里的 `PwABridge-*.zip`）。
+
+```bat
+set PWA_COOP=client
+set PWA_COOP_INDEX=2
+set PWA_COOP_ENDPOINT=<你的IP>:33772
+set PWA_COOP_TOKEN=<同一个口令>
+SlayTheSpire2.exe --force-steam off --clientId 1002 -fastmp join
+```
+
+- `PWA_COOP_INDEX` 必须和本地 client 不重复：本机汐是 1，远程用 2（再来一个用 3）；
+- 远程玩家的 Mod 端口会变成 8094（client 角色 8092 被本地汐占用后顺延），不影响游戏；
+- 三个窗口都在「角色选择」后各自点「启程」，主机开始，游戏内最多 4 人。
+
+### 网络
+
+- 最简单：主机和远程都装 **Tailscale / ZeroTier**，远程填主机的虚拟网卡 IP，不用开端口；
+- 或者路由器把 TCP **33772** 转发到主机，远程填公网 IP；Windows 防火墙要放行该端口；
+- 公网暴露时**必须设 `PWA_COOP_TOKEN`**：中继会拒绝没有口令或口令不匹配的注册（实测返回 `token mismatch`）。
+
+### 已知限制
+
+- 远程玩家必须装 Mod（走 broker）；原版客户端不能直接进（那需要 ENet↔broker 桥，未做）；
+- broker 是明文 TCP，公网请走 Tailscale 或 SSH 隧道，别裸奔；
+- 3 人房只在本机模拟过（host + 两个 client，其中一个用局域网 IP 走中继），真实异地延迟尚未实测。

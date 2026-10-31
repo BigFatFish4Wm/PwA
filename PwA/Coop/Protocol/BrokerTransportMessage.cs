@@ -82,7 +82,8 @@ public sealed record BrokerClientRegistrationDto(
     string ClientId,
     BrokerClientRole Role,
     int ClientIndex,
-    int ProtocolVersion = BrokerProtocol.CurrentVersion);
+    int ProtocolVersion = BrokerProtocol.CurrentVersion,
+    string? Token = null);
 
 public sealed record BrokerRegistrationAccepted
 {

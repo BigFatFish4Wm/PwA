@@ -32,7 +32,7 @@ public sealed class BrokerClientConnection : IAsyncDisposable
         await BrokerFrameCodec.WriteAsync(
             connection._stream,
             BrokerTransportMessage.ForRegistration(
-                new BrokerClientRegistrationDto(clientId, config.Role, config.ClientIndex)),
+                new BrokerClientRegistrationDto(clientId, config.Role, config.ClientIndex, BrokerProtocol.CurrentVersion, config.Token)),
             cancellationToken);
 
         var accepted = await BrokerFrameCodec.ReadAsync(connection._stream, cancellationToken);

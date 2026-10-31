@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.1.1'
+const WORLD_BUILD = '1.2.0'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */
@@ -362,6 +362,9 @@ function defaults() {
     waitTurnSeconds: 8,
     coopGameRoot: '',
     coopBrokerPort: 33772,
+    coopBind: '127.0.0.1',
+    coopToken: '',
+    coopClients: 1,
     coopSession: 'pwa',
     coopWithClient: true,
   }
@@ -376,6 +379,8 @@ function createCoopLauncher(cfg) {
   const state = { phase: 'stopped', hostPid: null, clientPid: null, detail: '', startedAt: null }
 
   const gameRoot = () => cfg().coopGameRoot || DEFAULT_GAME_ROOT
+  const bind = () => cfg().coopBind || '127.0.0.1'
+  const token = () => cfg().coopToken || ''
   const port = () => Number(cfg().coopBrokerPort) || 33772
   const session = () => cfg().coopSession || 'pwa'
 
@@ -428,6 +433,9 @@ function createCoopLauncher(cfg) {
   async function start(options = {}) {
     if (state.phase === 'running') return snapshot()
     const withClient = options.withClient ?? cfg().coopWithClient !== false
+    const clientCount = Math.max(1, Math.min(3, Number(options.clients ?? cfg().coopClients ?? 1)))
+    const bindAddress = options.bind ?? bind()
+    const secret = options.token ?? token()
     state.phase = 'starting'
     state.detail = `拉起 host（中继 127.0.0.1:${port()}）…`
 
@@ -437,7 +445,7 @@ function createCoopLauncher(cfg) {
     } else {
       state.hostPid = launch(
         ['--force-steam', 'off', '--clientId', '1', '-fastmp', 'host_standard'],
-        { PWA_COOP: 'host', PWA_COOP_INDEX: '0' },
+        { PWA_COOP: 'host', PWA_COOP_INDEX: '0', PWA_COOP_BIND: bindAddress, ...(secret ? { PWA_COOP_TOKEN: secret } : {}) },
       )
       const host = await waitFor(COOP_HOST_PORT, 'host', 90000)
       if (!host) {
@@ -448,19 +456,23 @@ function createCoopLauncher(cfg) {
     }
 
     if (withClient) {
-      state.detail = '拉起 client 窗口…'
-      const existingClient = await health(COOP_CLIENT_PORT)
-      if (existingClient?.role === 'client') {
-        state.detail = 'client 窗口已在跑，直接复用'
-      } else {
-        state.clientPid = launch(
-          ['--windowed', '--force-steam', 'off', '--clientId', '1001', '-fastmp', 'join'],
-          { PWA_COOP: 'client', PWA_COOP_INDEX: '1' },
+      for (let i = 1; i <= clientCount; i += 1) {
+        state.detail = `拉起 client ${i}/${clientCount}…`
+        const portNumber = COOP_CLIENT_PORT + (i - 1)
+        const existing = await health(portNumber)
+        if (existing?.role === 'client') {
+          state.detail = `client ${i} 已在跑，直接复用`
+          continue
+        }
+        const pid = launch(
+          ['--windowed', '--force-steam', 'off', '--clientId', String(1000 + i), '-fastmp', 'join'],
+          { PWA_COOP: 'client', PWA_COOP_INDEX: String(i), ...(secret ? { PWA_COOP_TOKEN: secret } : {}) },
         )
-        const client = await waitFor(COOP_CLIENT_PORT, 'client', 90000)
+        if (i === 1) state.clientPid = pid
+        const client = await waitFor(portNumber, 'client', 90000)
         if (!client) {
           state.phase = 'error'
-          state.detail = 'client 窗口没起来（看 %LOCALAPPDATA%\\PwA\\coop-<pid>.log）'
+          state.detail = `client ${i} 没起来（看 %LOCALAPPDATA%\\PwA\\coop-<pid>.log）`
           return snapshot()
         }
       }
@@ -1226,6 +1238,9 @@ function create(ctx) {
         type: 'object',
         properties: {
           withClient: { type: 'boolean', description: '是否同时拉起 client 窗口（默认按配置，true）' },
+          clients: { type: 'integer', description: '本地 client 窗口数量 1–3（含汐；第三人远程则设 1）' },
+          bind: { type: 'string', description: 'broker 绑定地址，远程玩家连进来时用 0.0.0.0' },
+          token: { type: 'string', description: '共享口令，远程玩家必须一致' },
         },
         additionalProperties: false,
       },

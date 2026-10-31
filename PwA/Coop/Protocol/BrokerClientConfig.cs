@@ -6,7 +6,8 @@ public sealed record BrokerClientConfig(
     int ClientIndex,
     string Host,
     int Port,
-    string SessionId)
+    string SessionId,
+    string? Token = null)
 {
     public string Endpoint => $"{Host}:{Port}";
 

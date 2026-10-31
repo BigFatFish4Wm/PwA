@@ -11,6 +11,7 @@ namespace PwA.Coop.Runtime;
 public sealed record BrokerModeSettings(
     bool Enabled,
     Protocol.BrokerClientConfig? Config,
+    string BindAddress,
     string ClientId,
     string EventLogPath,
     string? FailureReason)
@@ -19,6 +20,8 @@ public sealed record BrokerModeSettings(
     public const string IndexVariable = "PWA_COOP_INDEX";
     public const string EndpointVariable = "PWA_COOP_ENDPOINT";
     public const string SessionVariable = "PWA_COOP_SESSION";
+    public const string BindVariable = "PWA_COOP_BIND";
+    public const string TokenVariable = "PWA_COOP_TOKEN";
 
     private const string DefaultEndpoint = "127.0.0.1:33772";
     private const string DefaultSession = "pwa";
@@ -49,10 +52,13 @@ public sealed record BrokerModeSettings(
                 ? DefaultSession
                 : getEnvironmentVariable(SessionVariable)!.Trim();
 
-            var config = new Protocol.BrokerClientConfig(role, index, host, port, session).Validate();
+            var token = getEnvironmentVariable(TokenVariable)?.Trim();
+            var bind = getEnvironmentVariable(BindVariable)?.Trim();
+            var config = new Protocol.BrokerClientConfig(role, index, host, port, session, string.IsNullOrWhiteSpace(token) ? null : token).Validate();
             return new BrokerModeSettings(
+                BindAddress: string.IsNullOrWhiteSpace(bind) ? "127.0.0.1" : bind,
                 Enabled: true,
-                config,
+                Config: config,
                 ClientId: $"client-{index}",
                 EventLogPath: EventLogPathFor(modDirectory, config),
                 FailureReason: null);
@@ -76,7 +82,7 @@ public sealed record BrokerModeSettings(
 
     private static BrokerModeSettings Disabled(string modDirectory, string? failureReason)
     {
-        return new BrokerModeSettings(false, null, "client-0", EventLogPathFor(modDirectory, null), failureReason);
+        return new BrokerModeSettings(false, null, "127.0.0.1", "client-0", EventLogPathFor(modDirectory, null), failureReason);
     }
 
     private static string EventLogPathFor(string modDirectory, Protocol.BrokerClientConfig? config)

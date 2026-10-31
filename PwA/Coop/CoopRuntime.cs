@@ -45,19 +45,23 @@ public static class CoopRuntime
 
         if (config.Role == Protocol.BrokerClientRole.Host)
         {
-            StartRelay(config);
+            StartRelay(settings, config);
         }
 
         BrokerTransportPump.Start();
         InstallPatches();
     }
 
-    private static void StartRelay(Protocol.BrokerClientConfig config)
+    private static void StartRelay(BrokerModeSettings settings, Protocol.BrokerClientConfig config)
     {
         try
         {
-            var address = System.Net.IPAddress.Loopback;
-            var relay = new BrokerTcpServer(config.SessionId, address, config.Port, message => CoopLog.Write($"{message}"));
+            // 默认只听回环；要开三人房/远程玩家时设 PWA_COOP_BIND=0.0.0.0。
+            if (!System.Net.IPAddress.TryParse(settings.BindAddress, out var address))
+            {
+                address = System.Net.IPAddress.Loopback;
+            }
+            var relay = new BrokerTcpServer(config.SessionId, address, config.Port, message => CoopLog.Write($"{message}"), config.Token);
             _ = Task.Run(async () =>
             {
                 try
