@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.3.0'
+const WORLD_BUILD = '1.3.1'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */
@@ -463,12 +463,17 @@ function createCoopLauncher(cfg) {
   }
 
   function kill(pid) {
-    if (!pid) return
-    try {
-      spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' }).unref()
-    } catch {
-      // 进程可能已经自己退了
-    }
+    if (!pid) return Promise.resolve()
+    return new Promise((resolve) => {
+      try {
+        const child = spawn('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' })
+        child.on('exit', () => resolve())
+        child.on('error', () => resolve())
+      } catch {
+        // 进程可能已经自己退了
+        resolve()
+      }
+    })
   }
 
   async function start(options = {}) {
@@ -552,11 +557,15 @@ function createCoopLauncher(cfg) {
     if (state.hostPid) pids.add(state.hostPid)
     if (state.clientPid) pids.add(state.clientPid)
     for (const pid of await liveCoopPids()) pids.add(pid)
-    for (const pid of pids) kill(pid)
+    await Promise.all([...pids].map((pid) => kill(pid)))
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    const survivors = await liveCoopPids()
     state.hostPid = null
     state.clientPid = null
-    state.phase = 'stopped'
-    state.detail = pids.size > 0 ? `已关闭 ${pids.size} 个窗口` : '没有由这个按钮拉起的窗口'
+    state.phase = survivors.length > 0 ? 'partial' : 'stopped'
+    state.detail = survivors.length > 0
+      ? `还有 ${survivors.length} 个窗口没关掉（pid ${survivors.join(', ')}），再点一次「关闭联机」`
+      : (pids.size > 0 ? `已关闭 ${pids.size} 个窗口` : '没有由这个按钮拉起的窗口')
     return snapshot()
   }
 
