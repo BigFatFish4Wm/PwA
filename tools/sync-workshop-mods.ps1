@@ -60,7 +60,7 @@ foreach ($item in Get-ChildItem $workshopRoot -Directory -ErrorAction SilentlyCo
     $id = $manifest.Id
     if ($onlyIds.Count -gt 0 -and $onlyIds -notcontains $id) { continue }
     if ($id -notmatch '^[A-Za-z0-9_.-]+$') { Write-Output "[skip] bad id '$id' in $($item.Name)"; $skipped++; continue }
-    if ($id -eq 'PwABridge') { continue }
+
 
     $link = Join-Path $modsDir $id
     $target = $manifest.Dir

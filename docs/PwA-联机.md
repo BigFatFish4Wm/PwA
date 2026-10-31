@@ -176,3 +176,21 @@ powershell -ExecutionPolicy Bypass -File tools\sync-workshop-mods.ps1 -Remove   
 - 玩法类 Mod 会改变存档/profile，第一次开之前建议备份存档；
 - 工坊更新后目录可能变，重新点一次开始联机（或跑一次脚本）会重指链接；
 - 不想再用时执行 `-Remove`，它只删指向创意工坊的 junction，不动 `mods\PwABridge` 和 Mod 文件。
+
+## Steam 工坊安装 vs 本地安装
+
+Steam 工坊的 Mod 并不在“云端运行”：订阅后 Steam 会把它下载到本机
+`steamapps\workshop\content\2868840\<id>\`，游戏从本地加载，PwA 的 HTTP 服务也仍然是本机 `127.0.0.1`。
+
+区别只在于**启动方式**：
+
+| 安装方式 | 正常启动（Steam 开） | 联机启动（`--force-steam off`） |
+|---|---|---|
+| `mods\PwABridge`（GitHub zip） | 加载 | 加载 |
+| 仅 Steam 工坊订阅 | 加载 | **不加载**（Steam 被跳过，工坊目录不挂载） |
+
+所以：
+
+- 只订阅工坊、又想用联机/agent 的，`start-coop.ps1` 和 World 会**自动**把工坊里的 `PwABridge` 以 junction 链进 `mods\`（`mods\PwABridge` 已存在时不重复）；
+- 也可以手动：`tools\sync-workshop-mods.ps1 -Only PwABridge`；
+- 最稳的方式仍是同时装一份 GitHub 的 `mods\PwABridge`，工坊版用于普通启动。

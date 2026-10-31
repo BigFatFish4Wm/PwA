@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.4.2'
+const WORLD_BUILD = '1.5.0'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */
@@ -427,6 +427,36 @@ function normalizeLink(value) {
  * 把 Steam 创意工坊里已下载的 Mod 以 junction 链进 mods\，这样 --force-steam off 时也能加载。
  * 只创建链接，不改 Mod 文件；返回 linked/relinked/skipped/failed。
  */
+/** 本机没有 mods\PwABridge 时，从创意工坊里找一份链进来（Steam 订阅的用户用）。 */
+function ensurePwAMod(gameRoot, appId) {
+  const modsDir = join(gameRoot, 'mods')
+  const link = join(modsDir, 'PwABridge')
+  if (existsSync(link)) return { ok: true, linked: false }
+  const workshopRoot = resolve(gameRoot, '..', '..', 'workshop', 'content', String(appId || WORKSHOP_APP_ID))
+  if (!existsSync(workshopRoot)) {
+    return { ok: false, linked: false, reason: 'mods 里没有 PwABridge，也找不到创意工坊目录' }
+  }
+  let entries
+  try {
+    entries = readdirSync(workshopRoot, { withFileTypes: true })
+  } catch (error) {
+    return { ok: false, linked: false, reason: error.message }
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const manifest = findModManifest(join(workshopRoot, entry.name))
+    if (!manifest || manifest.id !== 'PwABridge') continue
+    try {
+      if (!existsSync(modsDir)) mkdirSync(modsDir, { recursive: true })
+      symlinkSync(manifest.dir, link, 'junction')
+      return { ok: true, linked: true, from: manifest.dir }
+    } catch (error) {
+      return { ok: false, linked: false, reason: error.message }
+    }
+  }
+  return { ok: false, linked: false, reason: '创意工坊里没有找到 PwABridge' }
+}
+
 function syncWorkshopMods(gameRoot, options = {}) {
   const appId = String(options.appId || WORKSHOP_APP_ID)
   const workshopRoot = resolve(gameRoot, '..', '..', 'workshop', 'content', appId)
@@ -445,7 +475,7 @@ function syncWorkshopMods(gameRoot, options = {}) {
     const manifest = findModManifest(join(workshopRoot, entry.name))
     if (!manifest) continue
     if (only.length > 0 && !only.includes(manifest.id)) continue
-    if (manifest.id === 'PwABridge') continue
+    if (manifest.id === 'PwABridge' && existsSync(join(modsDir, 'PwABridge'))) continue
     if (!/^[A-Za-z0-9_.-]+$/.test(manifest.id)) {
       result.failed.push(`非法 id：${manifest.id}（${entry.name}）`)
       continue
@@ -642,6 +672,14 @@ function createCoopLauncher(cfg) {
     state.phase = 'starting'
     state.workshop = null
     state.detail = `拉起 host（中继 ${bindAddress}:${port()}）…`
+
+    const pwaLocal = ensurePwAMod(gameRoot(), cfg().coopWorkshopAppId)
+    if (!pwaLocal.ok) {
+      state.phase = 'error'
+      state.detail = `本机没有可加载的 PwABridge：${pwaLocal.reason}。把 PwABridge 解压进 mods\\，或先在 Steam 订阅工坊版`
+      return snapshot()
+    }
+    if (pwaLocal.linked) state.detail = '已把创意工坊里的 PwABridge 链进 mods\\'
 
     if (withWorkshopMods) {
       state.detail = '同步创意工坊 Mod 到 mods\\ …'
