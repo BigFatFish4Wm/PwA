@@ -7,14 +7,14 @@
  */
 import { readdir, readFile } from 'node:fs/promises'
 import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from 'node:fs'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { homedir, tmpdir, networkInterfaces } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.4.0'
+const WORLD_BUILD = '1.4.1'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */
@@ -376,7 +376,8 @@ function defaults() {
   }
 }
 
-const DEFAULT_GAME_ROOT = 'D:\\Programs\\Steam\\steamapps\\common\\Slay the Spire 2'
+const DEFAULT_GAME_ROOT = 'C:\\Program Files (x86)\\Steam\\steamapps\\common\\Slay the Spire 2'
+let cachedGameRoot = ''
 const COOP_HOST_PORT = 8091
 const COOP_CLIENT_PORT = 8092
 const WORKSHOP_APP_ID = '2868840'
@@ -499,7 +500,41 @@ function createCoopLauncher(cfg) {
     startedAt: null,
   }
 
-  const gameRoot = () => cfg().coopGameRoot || DEFAULT_GAME_ROOT
+  /** 找游戏目录：配置 > PWA_GAME_ROOT > Steam 注册表/库目录 > 默认路径。 */
+  function findGameRoot() {
+    if (cachedGameRoot) return cachedGameRoot
+    const candidates = []
+    const configured = cfg().coopGameRoot || process.env.PWA_GAME_ROOT
+    if (configured) candidates.push(configured)
+    try {
+      const out = execFileSync('reg', ['query', 'HKCU\\Software\\Valve\\Steam', '/v', 'SteamPath'], { encoding: 'utf8' })
+      const match = out.match(/SteamPath\s+REG_SZ\s+(.+)/i)
+      if (match) {
+        const steamPath = match[1].trim().replace(/\//g, '\\')
+        candidates.push(join(steamPath, 'steamapps', 'common', 'Slay the Spire 2'))
+        try {
+          const vdf = readFileSync(join(steamPath, 'steamapps', 'libraryfolders.vdf'), 'utf8')
+          for (const library of vdf.matchAll(/"path"\s+"([^"]+)"/g)) {
+            candidates.push(join(library[1].replace(/\\\\/g, '\\'), 'steamapps', 'common', 'Slay the Spire 2'))
+          }
+        } catch {
+          // 没有库目录文件就只看默认库
+        }
+      }
+    } catch {
+      // 非 Windows 或没有注册表
+    }
+    candidates.push(DEFAULT_GAME_ROOT)
+    for (const candidate of candidates) {
+      if (candidate && existsSync(join(candidate, 'SlayTheSpire2.exe'))) {
+        cachedGameRoot = candidate
+        return candidate
+      }
+    }
+    return ''
+  }
+
+  const gameRoot = () => findGameRoot()
   const bind = () => cfg().coopBind || '127.0.0.1'
   const token = () => cfg().coopToken || ''
   const port = () => Number(cfg().coopBrokerPort) || 33772
@@ -598,6 +633,12 @@ function createCoopLauncher(cfg) {
     state.remoteSlots = remoteSlots
     state.remoteToken = secret
     state.remoteBind = bindAddress
+    if (!findGameRoot()) {
+      state.phase = 'error'
+      state.detail = '找不到游戏目录：请在配置 worlds.pwa.coopGameRoot 里填 Slay the Spire 2 的安装路径'
+      return snapshot()
+    }
+
     state.phase = 'starting'
     state.workshop = null
     state.detail = `拉起 host（中继 ${bindAddress}:${port()}）…`

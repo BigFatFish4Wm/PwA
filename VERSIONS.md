@@ -5,6 +5,7 @@
 
 | 版本 | 时间 | 内容 | git 标签 |
 |---|---|---|---|
+| **1.4.1** | 2026-10-31 | 发布前清理：去个人昵称/写死路径（游戏目录自动探测）、README 标注验证范围（远程真人未验证）与成本（约 ¥3/小时，DeepSeek v4.1 flash）；Steam 上传包 | `v1.4.1` |
 | **1.4.0** | 2026-10-31 | 联机启动可选带上已下载的创意工坊 Mod：以 junction 链进 `mods\`，`--force-steam off` 也能加载；面板勾选 / `-WithWorkshopMods` / `coopWithWorkshopMods`；`-Remove` 可清理 | `v1.4.0` |
 | **1.3.2** | 2026-10-31 | npm/市场打包整理：package.json 元数据与 `cortico.tags`（game/external-setup/experimental）、`files` 白名单、README 重写、版本统一 | `v1.3.2` |
 | **1.3.1** | 2026-10-31 | 关闭联机改为等待 taskkill 结果并复查 `/health`，真的关掉才报成功；残留窗口会提示再点一次 | `v1.3.1` |
