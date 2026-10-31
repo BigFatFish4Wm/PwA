@@ -1,6 +1,6 @@
 {
   "name": "cortico-world-pwa",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "type": "module",
   "description": "Slay the Spire 2 (PwA) world for Coopanion/Cortico: read the game state, play cards, drive runs and co-op rooms through the PwA bridge mod.",
   "author": "PwA contributors",

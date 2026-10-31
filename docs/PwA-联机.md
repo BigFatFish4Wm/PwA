@@ -151,3 +151,28 @@ Coopanion 的「联机房间」面板现在按角色分开：
 - 只有勾「本机模拟远程」（`localClients=2`）才会多开第三个本机窗口，用于自己测试三人局。
 
 面板上的「复制远程命令」会生成对方的启动脚本（含 index=2 和口令）。
+
+## 带上已下载的 Mod（创意工坊）
+
+PwA 启动游戏时用 `--force-steam off`（不初始化 Steam），好处是双窗口稳定、不用登录，但 **Steam 创意工坊的 Mod 不会被加载**——游戏只读 `mods\` 目录。
+
+解决：把创意工坊里已下载的 Mod 以 **junction** 链进 `mods\`，游戏就会当成普通本地 Mod 加载。
+
+- 面板：勾选「带上创意工坊 Mod」再点开始联机；
+- 命令行：`tools\start-coop.ps1 -WithWorkshopMods`（可加 `-WorkshopOnly silentSkin,necrobinderSkin` 只链指定的）；
+- 单独同步：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\sync-workshop-mods.ps1
+powershell -ExecutionPolicy Bypass -File tools\sync-workshop-mods.ps1 -Only silentSkin
+powershell -ExecutionPolicy Bypass -File tools\sync-workshop-mods.ps1 -Remove   # 只删本工具建的链接
+```
+
+- 配置键：`worlds.pwa.coopWithWorkshopMods`（默认 false）、`worlds.pwa.coopWorkshopOnly`（逗号分隔 id）。
+
+注意：
+
+- **联机双方必须装同一套 Mod**，否则游戏 hash/同步会对不上；
+- 玩法类 Mod 会改变存档/profile，第一次开之前建议备份存档；
+- 工坊更新后目录可能变，重新点一次开始联机（或跑一次脚本）会重指链接；
+- 不想再用时执行 `-Remove`，它只删指向创意工坊的 junction，不动 `mods\PwABridge` 和 Mod 文件。

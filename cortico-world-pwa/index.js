@@ -6,14 +6,15 @@
  * 不加载 DLL、不碰游戏内存，只读状态、发原子动作。
  */
 import { readdir, readFile } from 'node:fs/promises'
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync } from 'node:fs'
 import { spawn } from 'node:child_process'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { homedir, tmpdir, networkInterfaces } from 'node:os'
 import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.3.2'
+const WORLD_BUILD = '1.4.0'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */
@@ -366,6 +367,9 @@ function defaults() {
     coopToken: '',
     coopLocalClients: 1,
     coopRemoteSlots: 0,
+    coopWithWorkshopMods: false,
+    coopWorkshopAppId: '2868840',
+    coopWorkshopOnly: '',
     coopClients: 1,
     coopSession: 'pwa',
     coopWithClient: true,
@@ -375,6 +379,110 @@ function defaults() {
 const DEFAULT_GAME_ROOT = 'D:\\Programs\\Steam\\steamapps\\common\\Slay the Spire 2'
 const COOP_HOST_PORT = 8091
 const COOP_CLIENT_PORT = 8092
+const WORKSHOP_APP_ID = '2868840'
+
+/** 读一个目录里的 Mod 清单（任意 .json 且带 "id"）。 */
+function readManifestAt(dir) {
+  let entries
+  try {
+    entries = readdirSync(dir, { withFileTypes: true })
+  } catch {
+    return null
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.json')) continue
+    try {
+      const json = JSON.parse(readFileSync(join(dir, entry.name), 'utf8'))
+      if (json && typeof json.id === 'string' && json.id) return { id: json.id, dir }
+    } catch {
+      // 不是清单
+    }
+  }
+  return null
+}
+
+function findModManifest(itemDir) {
+  const root = readManifestAt(itemDir)
+  if (root) return root
+  let entries
+  try {
+    entries = readdirSync(itemDir, { withFileTypes: true })
+  } catch {
+    return null
+  }
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const nested = readManifestAt(join(itemDir, entry.name))
+    if (nested) return nested
+  }
+  return null
+}
+
+function normalizeLink(value) {
+  return resolve(value.replace(/^\\\\\?\\/, ''))
+}
+
+/**
+ * 把 Steam 创意工坊里已下载的 Mod 以 junction 链进 mods\，这样 --force-steam off 时也能加载。
+ * 只创建链接，不改 Mod 文件；返回 linked/relinked/skipped/failed。
+ */
+function syncWorkshopMods(gameRoot, options = {}) {
+  const appId = String(options.appId || WORKSHOP_APP_ID)
+  const workshopRoot = resolve(gameRoot, '..', '..', 'workshop', 'content', appId)
+  const modsDir = join(gameRoot, 'mods')
+  const only = Array.isArray(options.only) ? options.only.filter(Boolean) : []
+  const result = { workshopRoot, linked: [], relinked: [], skipped: [], failed: [] }
+
+  if (!existsSync(workshopRoot)) {
+    result.failed.push(`创意工坊目录不存在：${workshopRoot}`)
+    return result
+  }
+  if (!existsSync(modsDir)) mkdirSync(modsDir, { recursive: true })
+
+  for (const entry of readdirSync(workshopRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const manifest = findModManifest(join(workshopRoot, entry.name))
+    if (!manifest) continue
+    if (only.length > 0 && !only.includes(manifest.id)) continue
+    if (manifest.id === 'PwABridge') continue
+    if (!/^[A-Za-z0-9_.-]+$/.test(manifest.id)) {
+      result.failed.push(`非法 id：${manifest.id}（${entry.name}）`)
+      continue
+    }
+
+    const link = join(modsDir, manifest.id)
+    let stat = null
+    try {
+      stat = lstatSync(link)
+    } catch {
+      stat = null
+    }
+    if (stat) {
+      if (stat.isSymbolicLink()) {
+        const current = normalizeLink(readlinkSync(link))
+        if (current === resolve(manifest.dir)) {
+          result.skipped.push(manifest.id)
+          continue
+        }
+        rmSync(link, { force: true })
+        symlinkSync(manifest.dir, link, 'junction')
+        result.relinked.push(manifest.id)
+        continue
+      }
+      result.skipped.push(`${manifest.id}（已存在，非本工具创建）`)
+      continue
+    }
+
+    try {
+      symlinkSync(manifest.dir, link, 'junction')
+      result.linked.push(manifest.id)
+    } catch (error) {
+      result.failed.push(`${manifest.id}：${error.message}`)
+    }
+  }
+  return result
+}
+
 
 /** 一键联机：拉起 host 窗口（自己开中继）和 client 窗口，等两边 Mod 就绪。 */
 function createCoopLauncher(cfg) {
@@ -485,12 +593,30 @@ function createCoopLauncher(cfg) {
     const bindAddress = options.bind ?? bind()
     let secret = options.token ?? token()
     if (remoteSlots > 0 && !secret) secret = makeToken()
+    const withWorkshopMods = options.withWorkshopMods ?? cfg().coopWithWorkshopMods === true
     state.localClients = localClients
     state.remoteSlots = remoteSlots
     state.remoteToken = secret
     state.remoteBind = bindAddress
     state.phase = 'starting'
+    state.workshop = null
     state.detail = `拉起 host（中继 ${bindAddress}:${port()}）…`
+
+    if (withWorkshopMods) {
+      state.detail = '同步创意工坊 Mod 到 mods\\ …'
+      const only = String(options.workshopOnly ?? cfg().coopWorkshopOnly ?? '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+      const workshop = syncWorkshopMods(gameRoot(), {
+        appId: options.workshopAppId ?? cfg().coopWorkshopAppId,
+        only,
+      })
+      state.workshop = workshop
+      if (workshop.failed.length > 0) {
+        state.detail = `工坊 Mod 同步有 ${workshop.failed.length} 个失败：${workshop.failed[0]}`
+      }
+    }
 
     const existingHost = await health(COOP_HOST_PORT)
     if (existingHost?.role === 'host') {
@@ -586,6 +712,14 @@ function createCoopLauncher(cfg) {
       session: session(),
       detail: state.detail,
       stoppable: Boolean(state.hostPid || state.clientPid),
+      workshop: state.workshop
+        ? {
+            linked: state.workshop.linked,
+            relinked: state.workshop.relinked,
+            skipped: state.workshop.skipped,
+            failed: state.workshop.failed,
+          }
+        : null,
       remote: {
         slots: remoteSlots,
         connected: state.remoteConnected ?? 0,
@@ -1318,6 +1452,8 @@ function create(ctx) {
           withClient: { type: 'boolean', description: '是否同时拉起本机 client 窗口（默认 true）' },
           localClients: { type: 'integer', description: '本机 client 窗口数 1–2：第 1 个永远是汐，第 2 个只用于本机模拟远程' },
           remoteSlots: { type: 'integer', description: '远程位 0–2：对方在自己机器上开窗口，不占本机资源' },
+          withWorkshopMods: { type: 'boolean', description: '启动前把 Steam 创意工坊里已下载的 Mod 链进 mods\\（--force-steam off 也能加载）' },
+          workshopOnly: { type: 'string', description: '只链接这些工坊 Mod（逗号分隔 id）；留空=全部' },
           bind: { type: 'string', description: 'broker 绑定地址；内网穿透保持 127.0.0.1，直连局域网用 0.0.0.0' },
           token: { type: 'string', description: '共享口令；远程位>0 时不给会自动生成' },
         },
@@ -1325,7 +1461,7 @@ function create(ctx) {
       },
       tags: ['write', 'act'],
       barrierAfter: true,
-      handler: async (args) => fit(await coop.start({ withClient: args.withClient, localClients: args.localClients, remoteSlots: args.remoteSlots, bind: args.bind, token: args.token })),
+      handler: async (args) => fit(await coop.start({ withClient: args.withClient, localClients: args.localClients, remoteSlots: args.remoteSlots, bind: args.bind, token: args.token, withWorkshopMods: args.withWorkshopMods, workshopOnly: args.workshopOnly })),
     },
     {
       name: `${TOOL_PREFIX}coop_stop`,
@@ -1496,6 +1632,16 @@ function create(ctx) {
                 type: 'string',
                 title: zh ? 'broker 绑定地址' : 'Broker bind address',
                 description: zh ? '默认 127.0.0.1（配内网穿透）；局域网直连填 0.0.0.0。' : 'Default 127.0.0.1 (tunnel); use 0.0.0.0 for LAN.',
+              },
+              'worlds.pwa.coopWithWorkshopMods': {
+                type: 'boolean',
+                title: zh ? '带上创意工坊 Mod' : 'Include Workshop mods',
+                description: zh ? '启动前把 Steam 创意工坊里已下载的 Mod 以 junction 链进 mods\\，这样 --force-steam off 也能加载。联机双方必须装同一套。' : 'Junction downloaded Workshop mods into mods\\ before launch.',
+              },
+              'worlds.pwa.coopWorkshopOnly': {
+                type: 'string',
+                title: zh ? '只链接这些工坊 Mod' : 'Only these Workshop mods',
+                description: zh ? '逗号分隔的 Mod id；留空表示全部。' : 'Comma-separated mod ids; empty = all.',
               },
               'worlds.pwa.coopToken': {
                 type: 'string',

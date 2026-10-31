@@ -28,6 +28,10 @@ $exe = Join-Path $GameRoot 'SlayTheSpire2.exe'
 if (-not (Test-Path $exe)) { throw "game exe not found: $exe" }
 if ($Clients -lt 1 -or $Clients -gt 3) { throw 'Clients must be 1..3' }
 
+if ($WithWorkshopMods) {
+    & (Join-Path $PSScriptRoot 'sync-workshop-mods.ps1') -GameRoot $GameRoot | Select-Object -Last 3
+}
+
 if (-not $KeepRunning) {
     Get-Process SlayTheSpire2 -ErrorAction SilentlyContinue | Stop-Process -Force
     Start-Sleep -Seconds 4

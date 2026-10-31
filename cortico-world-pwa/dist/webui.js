@@ -37,9 +37,15 @@ const coopPanel = {
     tokenInput.type = 'text'
     tokenInput.placeholder = '口令（远程位>0 时自动生成）'
     tokenInput.autocomplete = 'off'
+    const workshopLabel = ui.h('label', 'pwa-coop-check')
+    const workshop = document.createElement('input')
+    workshop.type = 'checkbox'
+    const workshopText = document.createElement('span')
+    workshopText.textContent = '带上创意工坊 Mod'
+    workshopLabel.append(workshop, workshopText)
     const roll = ui.button('换一个口令')
     const copy = ui.button('复制远程命令')
-    controls.append(slotsLabel, slots, tokenInput, roll, copy)
+    controls.append(slotsLabel, slots, tokenInput, roll, copy, workshopLabel)
 
     const actions = ui.actions()
     const stop = ui.button('关闭联机', { variant: 'danger' })
@@ -66,6 +72,7 @@ const coopPanel = {
         { k: '远程位', v: remote.slots > 0 ? `已连 ${remote.connected}/${remote.slots}` : '未开启' },
         { k: '令牌', v: remote.slots > 0 ? (remote.token || '—') : '—' },
         { k: '地址', v: remote.slots > 0 ? (remote.endpoints?.[0] ?? '走隧道：填隧道地址') : '—' },
+        { k: '工坊 Mod', v: next.workshop ? 新链  / 跳过  : '未启用' },
         { k: '说明', v: next.detail || '—' },
       ]))
       if (document.activeElement !== tokenInput) tokenInput.value = remote.slots > 0 ? remote.token ?? '' : ''
@@ -109,6 +116,7 @@ const coopPanel = {
     const readOptions = () => ({
       remoteSlots: Math.max(0, Math.min(2, Number(slots.value) || 0)),
       token: tokenInput.value.trim(),
+      withWorkshopMods: workshop.checked,
     })
 
     start.addEventListener('click', () => {
