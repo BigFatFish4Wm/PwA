@@ -16,7 +16,7 @@ namespace PwA;
 [ModInitializer(nameof(Initialize))]
 public static class ModEntry
 {
-    public const string Version = "1.4.1";
+    public const string Version = "1.4.2";
     private const string LogPrefix = "[PwA]";
 
     private static int _shutdownStarted;

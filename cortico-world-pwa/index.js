@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const WORLD_ID = 'pwa'
 const ENV_PROMPT_FILE = fileURLToPath(new URL('./ENV_PROMPT.md', import.meta.url))
-const WORLD_BUILD = '1.4.1'
+const WORLD_BUILD = '1.4.2'
 const TOOL_PREFIX = 'sts2_'
 
 /** 这些动作不受 state.actions 限制（菜单/诊断类）。 */

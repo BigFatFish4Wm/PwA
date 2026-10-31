@@ -13,6 +13,7 @@ Write-Output "[pack] version $Version"
 Push-Location (Join-Path $root 'PwA')
 try {
     dotnet build PwA.csproj -c Release -v q --nologo | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'dotnet build failed' }
 } finally {
     Pop-Location
 }
@@ -32,6 +33,7 @@ Copy-Item (Join-Path $root 'THIRD_PARTY_NOTICES.md') $modStage
 Copy-Item (Join-Path $root 'README.md') $modStage
 Copy-Item (Join-Path $root 'LICENSE') $modStage
 Copy-Item (Join-Path $root 'tools\start-coop.ps1') $modStage
+Copy-Item (Join-Path $root 'tools\sync-workshop-mods.ps1') $modStage
 $modDocs = Join-Path $modStage 'docs'
 New-Item -ItemType Directory -Force -Path $modDocs | Out-Null
 Get-ChildItem (Join-Path $root 'docs') -Filter '*.md' | Copy-Item -Destination $modDocs

@@ -24,6 +24,19 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+if (-not $GameRoot) {
+    if ($env:PWA_GAME_ROOT) { $GameRoot = $env:PWA_GAME_ROOT }
+    if (-not $GameRoot) {
+        $candidates = @()
+        $steam = (Get-ItemProperty 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue).SteamPath
+        if ($steam) { $candidates += (Join-Path $steam 'steamapps\common\Slay the Spire 2') }
+        $candidates += 'C:\Program Files (x86)\Steam\steamapps\common\Slay the Spire 2'
+        foreach ($candidate in $candidates) {
+            if (Test-Path (Join-Path $candidate 'SlayTheSpire2.exe')) { $GameRoot = $candidate; break }
+        }
+    }
+    if (-not $GameRoot) { throw 'GameRoot not found; pass -GameRoot or set PWA_GAME_ROOT' }
+}
 $exe = Join-Path $GameRoot 'SlayTheSpire2.exe'
 if (-not (Test-Path $exe)) { throw "game exe not found: $exe" }
 if ($Clients -lt 1 -or $Clients -gt 3) { throw 'Clients must be 1..3' }
