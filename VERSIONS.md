@@ -5,6 +5,7 @@
 
 | 版本 | 时间 | 内容 | git 标签 |
 |---|---|---|---|
+| **1.3.2** | 2026-10-31 | npm/市场打包整理：package.json 元数据与 `cortico.tags`（game/external-setup/experimental）、`files` 白名单、README 重写、版本统一 | `v1.3.2` |
 | **1.3.1** | 2026-10-31 | 关闭联机改为等待 taskkill 结果并复查 `/health`，真的关掉才报成功；残留窗口会提示再点一次 | `v1.3.1` |
 | **1.3.0** | 2026-10-31 | 联机面板按角色重做：host/汐固定本机，远程位 0–2 只在对方机器开窗（不占本机资源）；面板可选远程位、生成/复制远程命令；`/health` 增加 `coop_peers` | `v1.3.0` |
 | **1.2.0** | 2026-10-31 | 三人房：broker 支持 `PWA_COOP_BIND` / `PWA_COOP_TOKEN` / 多 client（index 1–3）；`sts2_coop_start` 支持 clients/bind/token；实测三窗口 3 人进同一局、无口令注册被拒 | `v1.2.0` |

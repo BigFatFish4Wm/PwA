@@ -1,21 +1,53 @@
 {
   "name": "cortico-world-pwa",
-  "version": "1.3.1",
-  "private": true,
+  "version": "1.3.2",
   "type": "module",
-  "description": "Slay the Spire 2 bridge for Cortico/Coopanion (PwA mod)",
+  "description": "Slay the Spire 2 (PwA) world for Coopanion/Cortico: read the game state, play cards, drive runs and co-op rooms through the PwA bridge mod.",
   "author": "PwA contributors",
   "license": "MIT",
   "main": "./index.js",
-  "keywords": ["cortico-world"],
+  "files": [
+    "index.js",
+    "dist/",
+    "ENV_PROMPT.md",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "keywords": [
+    "cortico-world",
+    "coopanion",
+    "cortico",
+    "slay-the-spire-2",
+    "game",
+    "mcp",
+    "multiplayer"
+  ],
+  "os": [
+    "win32"
+  ],
   "engines": {
     "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BigFatFish4Wm/PwA.git",
+    "directory": "cortico-world-pwa"
+  },
+  "homepage": "https://github.com/BigFatFish4Wm/PwA#readme",
+  "bugs": {
+    "url": "https://github.com/BigFatFish4Wm/PwA/issues"
   },
   "cortico": {
     "kind": "world",
     "api": 6,
     "webUiClient": "dist/webui.js",
     "displayName": "杀戮尖塔 2（PwA）",
-    "description": "通过 PwA 桥接 Mod 读局面、出牌、推进流程；只提供动作，不做决策。"
+    "description": "通过 PwA 桥接 Mod 读局面、出牌、推进流程，支持本机双人/三人联机；只提供动作，不做决策。",
+    "tags": [
+      "game",
+      "external-setup",
+      "experimental"
+    ]
   }
 }

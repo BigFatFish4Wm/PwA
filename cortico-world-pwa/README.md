@@ -1,79 +1,71 @@
 # cortico-world-pwa
 
-## 安装（发布包）
+让 Coo（Coopanion 桌宠）陪你玩 **《杀戮尖塔 2》**：读取局面、出牌、喝药水、选地图、做事件、开宝箱、营火、商店，还能开本机双人 / 三人联机房。
 
-1. 解压 `cortico-world-pwa-1.0.0.zip` 到一个固定目录；
-2. 让 Coopanion 能加载它：把整个 `cortico-world-pwa` 目录放到
-   `…\coopanion\data\extensions\node_modules\cortico-world-pwa`（或建 junction 链接）；
-3. Coopanion 设置里启用 `worlds.pwa`（`enabled: true`），**完全退出再打开**（ESM 不热更）；
-4. 游戏那边装好 `PwABridge` Mod 并启动，World 会自动发现窗口并优先连 client（8092）。
+这是 **World 扩展**，依赖 [PwA Bridge](https://github.com/BigFatFish4Wm/PwA) 这个游戏内 Mod：Mod 在本地窗口起一个 `127.0.0.1` 的 HTTP / MCP 服务，本扩展把它翻译成 Coo 能调用的工具。
 
-需要 Node ≥ 22、Coopanion（World API 6）。下面的仓库内脚本路径（`tools\...`）只在本仓库里有效，
-单独安装时不需要。
+> A [Cortico](https://github.com/Pal-AI-Lab/Cortico) World for *Slay the Spire 2*: the bot reads the game state and plays through the PwA bridge mod. Local only — no data leaves your machine except the model calls you already configured.
 
-Coopanion（Cortico）的杀戮尖塔 2 World：把 [PwA Bridge](../PwA) Mod 的本机 HTTP 接口
-翻译成汐的工具。World 只做「读局面 + 翻译动作」，不做任何决策。
+## 需要先装什么
 
-## 它连谁
-
-Mod 在每个游戏窗口起一个 `127.0.0.1` 服务，端口按角色分配：
-
-| 窗口 | 端口 |
+| 依赖 | 说明 |
 |---|---|
-| 单人 | 8090 |
-| 主机（host） | 8091 |
-| 第二窗口（client，双开时新开的那个） | 8092 |
+| Windows + 《杀戮尖塔 2》 | 只测过 Steam 版 **v0.111.0** |
+| [PwA Bridge Mod](https://github.com/BigFatFish4Wm/PwA/releases) | 解压 `PwABridge-*.zip`，把 `PwABridge` 目录放进 `…\Slay the Spire 2\mods\` |
+| Coopanion | 在当前 World 页里启用本扩展，然后**完全重启** Coopanion（World 不热加载） |
 
-端口被占时顺延；每个进程会在 `%LOCALAPPDATA%\PwA\endpoints\<pid>.json` 留名片。
-World 自动发现并**优先选 client 窗口**——正好是「汐自己那一侧」；主机窗口不需要被接管。
+安装：在 Coopanion 的扩展页搜索 `cortico-world-pwa` 安装并启用；或者 `npm i cortico-world-pwa` 后按扩展页的「从本机目录安装」装入。
 
-也可以在配置里写死 `worlds.pwa.baseUrl`（如 `http://127.0.0.1:8092`）。
+## 它能让 Coo 做什么
+
+- **看局面**：画面、回合、能量、手牌（带稳定 `ref`）、敌人意图与血量、遗物、药水、地图、事件、奖励、商店、营火、宝箱、结算页
+- **做动作**：出牌（可指定目标）、喝/丢药水、结束回合、选地图节点、事件选项与继续、领奖励/选牌/跳过、商店买卖、营火选项、开箱/选遗物、选牌界面、继续/跳过、结算退出
+- **联机**：本机 host + 本机 agent 窗口；可选 0–2 个远程位（远程玩家在自己电脑上装同一个 Mod 连进来）
+- **叫醒**：轮到你、需要选牌、奖励、事件继续、地图、宝箱、营火、结算等「界面在等你」的时刻主动推送提醒
+
+只提供工具，不做决策；出牌策略由模型决定。
 
 ## 工具
 
 | 工具 | 作用 |
 |---|---|
-| `sts2_view` | 读局面（画面、可用动作、手牌带 `ref`、敌人意图、地图/事件/奖励…）；默认只回变化，`full=true` 强制全量 |
-| `sts2_act` | 执行一个动作，参数照 `state` 里的结构填 |
-| `sts2_plan` | 一次提交 ≤8 步，遇不可用就停 |
-| `sts2_wait` | 等到轮到/出现选择（≤20 秒），只在过场时用 |
-| `sts2_diag` | 连接诊断：哪些窗口、角色、端口、连的是哪个 |
+| `sts2_view` | 读局面（默认只回变化，`full=true` 全量） |
+| `sts2_act` | 执行一个原子动作 |
+| `sts2_plan` | 一次提交 ≤8 步 |
+| `sts2_wait` | 等到轮到你 / 出现选择（≤20 秒） |
+| `sts2_diag` | 连接诊断：找到哪些窗口、角色、端口 |
+| `sts2_coop_start` / `sts2_coop_stop` / `sts2_coop_state` | 一键联机房间 |
 
-动作名与参数见仓库根目录 `docs/PwA-接口.md`，以及环境提示词 `ENV_PROMPT.md`。
+动作名和参数见 [docs/PwA-接口.md](https://github.com/BigFatFish4Wm/PwA/blob/main/docs/PwA-接口.md)。
 
 ## 配置
 
-`worlds.pwa.*`：`baseUrl`（留空自动发现）、`pollSeconds`（2–30，默认 4）、`watch`（主动提醒）、
-`delta`（只回变化）、`timeoutMs`、`maxChars`。`enabled` 由 Coopanion 的 World 页开关。
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `worlds.pwa.baseUrl` | 空 | 留空自动发现，优先连 client（8092） |
+| `worlds.pwa.pollSeconds` | 4 | 事件轮询间隔 2–30 |
+| `worlds.pwa.watch` | true | 主动提醒 |
+| `worlds.pwa.auto` | true | 自动推进（收金币/继续/开箱等无决策动作） |
+| `worlds.pwa.coopBind` | 127.0.0.1 | 内网穿透保持默认；局域网直连填 0.0.0.0 |
+| `worlds.pwa.coopRemoteSlots` | 0 | 远程位 0–2，只在对方机器开窗，不占本机资源 |
 
-## 本地安装 / 联调
+## 联机（可选）
 
-```powershell
-# 1) 登记包 + 写配置（会停用旧的 sts2 world，工具名会撞）
-node tools\enable-world.mjs
+- 本机：host（8091）+ agent client（8092），一键拉起；
+- 远程：对方装同一个 Mod，填你给的地址和口令，`-fastmp join` 连进来；
+- 详细步骤见 [联机文档](https://github.com/BigFatFish4Wm/PwA/blob/main/docs/PwA-联机.md)。
 
-# 2) 建 node_modules 链接
-powershell -ExecutionPolicy Bypass -File tools\link-world.ps1
+## 常见问题
 
-# 3) 重启 Coopanion（ESM 不热更）
+- **找不到窗口**：先确认游戏已启动且 Mod 加载（`%LOCALAPPDATA%\PwA\endpoints\` 有文件）；再点 `sts2_diag`。
+- **端口变了**：单人 8090 / host 8091 / client 8092（被占用会顺延），World 会自动发现。
+- **改了 World 没生效**：World 不热加载，重启 Coopanion。
+- **联机不同步**：只支持双方都装同一个 Mod 的 broker 房；原版 Steam 客户端进不来。
 
-# 不经 Coopanion 直接联调：
-node cortico-world-pwa\test\run.mjs diag
-node cortico-world-pwa\test\run.mjs view
-node cortico-world-pwa\test\run.mjs combat --end-turn
-```
+## 隐私
 
-## 设计取舍
+扩展只访问本机 `127.0.0.1` 上的 Mod 端口，以及你配置的联机 broker（默认本机回环）。它不上传游戏截图或账号信息；模型调用走你自己在 Coopanion 里配置的 provider。
 
-- **状态白名单**：只发决策需要的字段；牌堆只给计数，牌组给 `ID×n`，回执不带整份原始状态。
-- **ref 稳定**：手牌 `c1..cN` 由 Mod 绑定在卡牌实例上，一回合内不随出牌重排；World 不自己编号。
-- **动作前置校验**：`sts2_act` 会先对照 `state.actions` 和手牌 ref；`blocked`/`needs_target`/`stale_ref`
-  会带 `hint` 返回，让模型重读而不是瞎重试。
-- **事件提醒**：轮询 Mod 的事件环，只在「轮到你」「需要选择」时推一条 external 事件（debounce），不刷屏。
+## 许可
 
-
-## 一键联机
-
-- 面板：Coopanion 的 World 面板里「联机房间」→「开始联机」（拉起 host 8091 + client 8092，host 自己开 broker 中继）。
-- 指令：sts2_coop_start / sts2_coop_stop / sts2_coop_state。
-- 已经开着的窗口会复用；关闭只会关掉 8091/8092 上那两个联机窗口。
+MIT。联机协议部分改编自 [Bahnerbd/STS2CouchCoop](https://github.com/Bahnerbd/STS2CouchCoop)（MIT），详见 `THIRD_PARTY_NOTICES.md`。本项目不包含《杀戮尖塔 2》的任何资源或二进制。
